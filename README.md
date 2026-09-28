@@ -6,6 +6,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-8bf03c?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square)](https://nodejs.org)
 
+> ### 🎬 Project Demo
+> [**▶ Watch the MB-88 demo video**](media/mb88-demo.mp4)
 **Live demo:** <https://fix-beeper-mb-88.onrender.com>
 **Repository:** <https://github.com/tejenderlib/fix-beeper-mb-88>
 
