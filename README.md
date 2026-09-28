@@ -2,16 +2,28 @@
 
 **A retro two-person real-time messaging terminal inspired by classic pagers, beepers, and message typewriters.**
 
+<p align="center">
+  <video src="media/mb88-demo.mp4" controls width="880">
+    Your browser does not support embedded video.
+    <a href="media/mb88-demo.mp4">Watch the MB-88 demo video (MP4)</a>
+  </video>
+</p>
+
+<p align="center">
+  <a href="media/mb88-demo.mp4"><strong>▶ Watch the MB-88 demo video</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://fix-beeper-mb-88.onrender.com">Live demo</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/tejenderlib/fix-beeper-mb-88">Repository</a>
+</p>
+
+Two devices pair through a private invite code, then exchange pager-style messages in real time. Message content is encrypted on the device before it reaches the wire, so the relay only moves ciphertext it cannot read. No accounts, no message history, no third party in the message path.
+
+> **Security note:** the encryption here is **not authenticated end-to-end encryption**. It defends message content against a passive or honest-but-curious relay, not against an active man-in-the-middle. See [Security limitations](#security-limitations).
+
 [![Live Demo](https://img.shields.io/badge/live%20demo-fix--beeper--mb--88-8bf03c?style=flat-square)](https://fix-beeper-mb-88.onrender.com)
 [![License: MIT](https://img.shields.io/badge/license-MIT-8bf03c?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square)](https://nodejs.org)
-
-> ### 🎬 Project Demo
-> [**▶ Watch the MB-88 demo video**](media/mb88-demo.mp4)
-**Live demo:** <https://fix-beeper-mb-88.onrender.com>
-**Repository:** <https://github.com/tejenderlib/fix-beeper-mb-88>
-
-Two devices pair through a private invite code, then exchange pager-style messages in real time. Message content is end-to-end encrypted on the device, so the relay only ever moves ciphertext it cannot read. No accounts, no message history, no third party in the message path.
 
 ---
 
@@ -34,7 +46,7 @@ The whole application is a single Node process: it serves the client, terminates
 | Delivered / received states | Every slip is stamped `✓ DELIVERED` or `← RECEIVED` |
 | `/connect CODE` | Join a pair by typing the code into the LCD and pressing TRANSMIT |
 | `/clear` | Clear the desk with a typed command |
-| End-to-end encrypted content | Message bodies are encrypted on the device before they hit the wire |
+| Encrypted message content | Message bodies are encrypted on the device before they hit the wire (see limitations below) |
 | Responsive layout | Adapts from desktop down to mobile widths |
 | WebSocket communication | One socket per device, multiplexed over the same HTTP server as the UI |
 | Server-authoritative lifetimes | 30/60/120/160-minute connections, expiry swept and extended by the server |
@@ -42,7 +54,7 @@ The whole application is a single Node process: it serves the client, terminates
 
 ## Encryption architecture
 
-Message **content** is end-to-end encrypted. The pairing metadata around it is not.
+Message **content** is encrypted end-to-end between the two devices. The pairing metadata around it is not.
 
 | Primitive | Detail |
 | --- | --- |
@@ -167,6 +179,8 @@ fix-beeper-mb-88/
 │   ├── regression.test.js   Encrypted relay + server authority
 │   ├── netclient.test.js    Client-side encrypt/decrypt and teardown
 │   └── helpers/             Server harness, crypto bridge, browser shim
+├── media/
+│   └── mb88-demo.mp4        Promo video for the MB-88
 ├── package.json
 └── README.md
 ```
@@ -236,6 +250,8 @@ PORT=8080 npm start
 | 3 | Peer messaging with directional paper slips | Done |
 | 4 | No-console pairing through the on-device link bar | Done |
 | 5 | **End-to-end encryption** — ECDH + HKDF + AES-GCM | Done |
+
+Phase 5 covers content encryption between the two devices. The key exchange is not yet authenticated — see [Security limitations](#security-limitations) and [Future improvements](#future-improvements).
 
 ## Future improvements
 
