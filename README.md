@@ -11,10 +11,6 @@ Two devices pair through a private invite code, then exchange pager-style messag
 
 https://github.com/user-attachments/assets/842fa8c9-7a77-4163-9903-fd25fa82e307
 
-[![Live Demo](https://img.shields.io/badge/live%20demo-fix--beeper--mb--88-8bf03c?style=flat-square)](https://fix-beeper-mb-88.onrender.com)
-
----
-
 ## Overview
 
 FIX BEEPER MB-88 is a two-person messaging terminal built around the interaction design of 1980s pagers and message typewriters.
