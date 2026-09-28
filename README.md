@@ -246,5 +246,4 @@ Phase 5 covers content encryption between the two devices. The key exchange is n
 - Beyond security: delivery receipts, message history, persistence, and authentication.
 
 ## License
-
 Released under the [MIT License](LICENSE).
