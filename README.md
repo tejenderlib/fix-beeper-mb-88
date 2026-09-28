@@ -1,29 +1,17 @@
 # FIX BEEPER MB-88
 
 **A retro two-person real-time messaging terminal inspired by classic pagers, beepers, and message typewriters.**
-https://github.com/tejenderlib/fix-beeper-mb-88/blob/main/media/mb88-demo.mp4
-<p align="center">
-  <video src="media/mb88-demo.mp4" controls width="880">
-    Your browser does not support embedded video.
-    <a href="media/mb88-demo.mp4">Watch the MB-88 demo video (MP4)</a>
-  </video>
-</p>
-
-<p align="center">
-  <a href="media/mb88-demo.mp4"><strong>▶ Watch the MB-88 demo video</strong></a>
-  &nbsp;·&nbsp;
-  <a href="https://fix-beeper-mb-88.onrender.com">Live demo</a>
-  &nbsp;·&nbsp;
-  <a href="https://github.com/tejenderlib/fix-beeper-mb-88">Repository</a>
-</p>
 
 Two devices pair through a private invite code, then exchange pager-style messages in real time. Message content is encrypted on the device before it reaches the wire, so the relay only moves ciphertext it cannot read. No accounts, no message history, no third party in the message path.
 
 > **Security note:** the encryption here is **not authenticated end-to-end encryption**. It defends message content against a passive or honest-but-curious relay, not against an active man-in-the-middle. See [Security limitations](#security-limitations).
 
-[![Watch MB-88 Demo](media/mb88-demo-poster.png)](media/mb88-demo.mp4)
 [![License: MIT](https://img.shields.io/badge/license-MIT-8bf03c?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square)](https://nodejs.org)
+
+https://github.com/user-attachments/assets/842fa8c9-7a77-4163-9903-fd25fa82e307
+
+[![Live Demo](https://img.shields.io/badge/live%20demo-fix--beeper--mb--88-8bf03c?style=flat-square)](https://fix-beeper-mb-88.onrender.com)
 
 ---
 
