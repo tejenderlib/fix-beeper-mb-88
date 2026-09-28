@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Secrets and local config (NEVER commit keys/tokens/certs)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Build / cache output
+dist/
+build/
+out/
+.cache/
+*.log
+npm-debug.log*
+.npm/
+
+# Test and coverage output
+coverage/
+.nyc_output/
+
+# OS / editor temporary files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-workspace
+
+# Unrelated local scratch (not part of the app)
+notion/
+.serena/

@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+window.contextInfo = {"files":[],"materials":[],"crafts":[]};
+// 处理锚点链接跳转（srcDoc iframe 中锚点链接默认行为不正确）
+document.addEventListener('click', function(e) {
+  var anchor = e.target.closest('a');
+  if (anchor) {
+    var href = anchor.getAttribute('href');
+    if (href && href.startsWith('#')) {
+      e.preventDefault();
+      var targetId = href.slice(1);
+      var target = document.getElementById(targetId);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  }
+});
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FIX BEEPER · MB-88 Message Typewriter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="dust" id="dust"></div>
+  <div class="vignette"></div>
+  <div class="scanlines"></div>
+  <div class="crt-sweep"></div>
+
+  <button class="sound-toggle" id="soundToggle" aria-pressed="true">♪ SOUND: ON</button>
+
+  <aside class="linkfloat" id="linkbar" aria-label="Link status">
+    <div class="linktop">
+      <div class="linkterm-state" id="linkState">LINK ● OFFLINE</div>
+      <button class="sigbtn" id="btnInvite" type="button">INVITE</button>
+    </div>
+    <div class="linkterm-group" id="durGroup" hidden>
+      <div class="linkterm-label">CONNECTION TIME</div>
+      <div class="linkterm-btns">
+        <button class="lkey dur" data-min="30" type="button">30 MIN</button>
+        <button class="lkey dur sel" data-min="60" type="button">60 MIN</button>
+      </div>
+    </div>
+    <div class="linkterm-group" id="linkCodeGroup" hidden>
+      <div class="linkterm-label">INVITE CODE</div>
+      <code class="linkterm-code" id="linkCode"></code>
+    </div>
+    <div class="linkterm-group" id="linkUrlGroup" hidden>
+      <div class="linkterm-label">INVITE LINK</div>
+      <div class="linkterm-url" id="linkUrl" tabindex="0" title="Select and copy"></div>
+    </div>
+    <div class="linkterm-group" id="timerGroup" hidden>
+      <div class="linkterm-label">TIME LEFT</div>
+      <div class="linkterm-time" id="timeLeft">--:--</div>
+    </div>
+    <div class="linkterm-group" id="extendGroup" hidden>
+      <div class="linkterm-label">EXTEND LINK</div>
+      <div class="linkterm-btns">
+        <button class="lkey ext" data-min="30" type="button">+30 MIN</button>
+        <button class="lkey ext" data-min="60" type="button">+60 MIN</button>
+        <button class="lkey ext" data-min="120" type="button">+120 MIN</button>
+        <button class="lkey ext" data-min="160" type="button">+160 MIN</button>
+      </div>
+    </div>
+    <div class="linkterm-btns">
+      <button class="lkey" id="btnCopy" type="button" hidden>[ COPY LINK ]</button>
+      <button class="lkey dim" id="btnDisconnect" type="button" hidden>[ DISCONNECT ]</button>
+      <button class="lkey" id="btnAddTime" type="button" hidden>[ ADD TIME ]</button>
+      <button class="lkey green" id="btnAccept" type="button" hidden>[ ACCEPT ]</button>
+      <button class="lkey" id="btnReject" type="button" hidden>[ REJECT ]</button>
+      <button class="lkey" id="btnInfo" type="button" hidden>[ INFO ]</button>
+    </div>
+    <div class="linkterm-btns">
+      <button class="lkey" id="btnClose" type="button" hidden>[ CLOSE ]</button>
+    </div>
+  </aside>
+
+  <header class="app-header">
+    <div class="badge-row">
+      <svg class="moto-logo" viewBox="0 0 64 64" aria-hidden="true">
+        <circle cx="32" cy="32" r="29" fill="none" stroke="currentColor" stroke-width="2.6"/>
+        <path d="M15 45 L15 21 L25 34 L32 23 L39 34 L49 21 L49 45" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="moto-word">MOTOROLA</span>
+      <span class="hdr-divider"></span>
+      <span class="fixbeeper">FIX BEEPER</span>
+      <span class="hdr-divider"></span>
+      <span class="led" title="power"></span>
+      <span class="clock" id="clock">--:--:--</span>
+    </div>
+    <div class="subtitle">Message Typewriter · Model MB-88</div>
+    <p class="intro">A POCKET MESSAGE TERMINAL FOR TWO. <b>Pair with a private link or code, type your page, and press TRANSMIT.</b> Sent pages print to your side of the desk. Received pages arrive from the other side.</p>
+  </header>
+
+  <main class="stage">
+    <section class="device" id="device" aria-label="Motorola Fix Beeper MB-88">
+      <span class="screw tl"></span><span class="screw tr"></span>
+      <span class="screw bl"></span><span class="screw br"></span>
+
+      <div class="lcd-wrap" id="lcdWrap">
+        <div class="lcd" id="lcd">
+          <div class="lcd-line">
+            <span class="lcd-text" id="lcdText"></span><span class="lcd-caret"></span>
+          </div>
+          <span class="lcd-counter" id="lcdCounter">0/160</span>
+          <label for="msgInput" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Message</label>
+          <input id="msgInput" class="lcd-input" type="text" maxlength="160" autocomplete="off" spellcheck="false" placeholder=" " aria-label="Type your message">
+        </div>
+      </div>
+
+      <div class="keyboard" id="keyboard" aria-label="Typewriter keyboard"></div>
+
+      <div class="status-row">
+        <div class="status-leds">
+          <span class="sled on" id="sledPower"><i></i>POWER</span>
+          <span class="sled" id="sledLink"><i></i>LINK</span>
+          <span class="sled" id="sledTx"><i></i>TX</span>
+        </div>
+        <span class="engraved">POWER · LINK · TX</span>
+      </div>
+      <p class="hint">TYPE A MESSAGE, PRESS TRANSMIT. YOUR PAGES PRINT RIGHT; RECEIVED PAGES ARRIVE LEFT. TYPE /clear TO CLEAR THE DESK. TO JOIN, GET THE CODE FROM THE OTHER DEVICE, THEN TYPE /connect YOUR-CODE AND PRESS TRANSMIT.</p>
+    </section>
+  </main>
+
+  <div class="cards-layer" id="cardsLayer" aria-live="polite"></div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ---------- shared state ---------- */
+  var soundOn = true;          // remembered in JS variable
+  var audioCtx = null;
+  var MAXLEN = 160;
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  /* ---------- live clock ---------- */
+  function pad(n){ return (n<10?'0':'')+n; }
+  function tickClock(){
+    var d = new Date();
+    $('clock').textContent = pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  /* ---------- audio (created on first gesture) ---------- */
+  function ensureAudio(){
+    if(!audioCtx){
+      try{
+        var Ctx = window.AudioContext || window.webkitAudioContext;
+        if(Ctx) audioCtx = new Ctx();
+      }catch(e){ audioCtx = null; }
+    }
+    if(audioCtx && audioCtx.state === 'suspended'){ audioCtx.resume(); }
+    return audioCtx;
+  }
+  function tone(freq, dur, type, gain, when){
+    var ctx = ensureAudio(); if(!ctx || !soundOn) return;
+    var t0 = ctx.currentTime + (when||0);
+    var osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = type || 'square';
+    osc.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(gain||0.12, t0+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    osc.connect(g); g.connect(ctx.destination);
+    osc.start(t0); osc.stop(t0+dur+0.02);
+  }
+  function sfxClick(){ tone(1400 + Math.random()*500, 0.03, 'square', 0.05); }
+  function sfxKey(){ tone(900 + Math.random()*300, 0.035, 'square', 0.06); }
+  function sfxBeepBeep(){ tone(1180, 0.10, 'square', 0.11, 0); tone(1560, 0.12, 'square', 0.11, 0.16); }
+  function sfxDeliver(){ tone(880, 0.09, 'triangle', 0.10, 0); tone(1320, 0.13, 'triangle', 0.10, 0.10); }
+
+  $('soundToggle').addEventListener('click', function(){
+    soundOn = !soundOn;
+    this.classList.toggle('off', !soundOn);
+    this.textContent = soundOn ? '♪ SOUND: ON' : '♪ SOUND: OFF';
+    this.setAttribute('aria-pressed', String(soundOn));
+    if(soundOn){ ensureAudio(); sfxKey(); }
+  });
+
+  /* ---------- LCD mirror + input ---------- */
+  var input = $('msgInput');
+  var lcdText = $('lcdText');
+  var lcdCounter = $('lcdCounter');
+
+  var lcdNotice = null, noticeTimer = 0;
+  // Command status line for the LCD (e.g. /connect flow). Persistent until
+  // cleared, or auto-clears after holdMs. Composer underneath is preserved.
+  function showNotice(text, holdMs) {
+    lcdNotice = text;
+    renderLCD();
+    clearTimeout(noticeTimer);
+    if (holdMs) {
+      noticeTimer = setTimeout(function () { clearNotice(); }, holdMs);
+    }
+  }
+  function clearNotice() {
+    lcdNotice = null;
+    clearTimeout(noticeTimer);
+    renderLCD();
+  }
+  function renderLCD(){
+    // Transient command status (e.g. /connect flow) takes over the LCD until
+    // cleared; the counter keeps reflecting the real composer underneath.
+    if (lcdNotice !== null && lcdNotice !== undefined && lcdNotice !== '') {
+      lcdText.textContent = lcdNotice;
+      lcdText.classList.remove('lcd-placeholder');
+      lcdCounter.textContent = input.value.length + '/' + MAXLEN;
+      lcdText.scrollLeft = lcdText.scrollWidth;
+      return;
+    }
+    var v = input.value;
+    if(v.length === 0){
+      lcdText.textContent = 'READY \u00b7 TYPE MESSAGE\u2026';
+      lcdText.classList.add('lcd-placeholder');
+    } else {
+      lcdText.textContent = v;
+      lcdText.classList.remove('lcd-placeholder');
+    }
+    lcdCounter.textContent = v.length + '/' + MAXLEN;
+    lcdCounter.classList.toggle('warn', v.length > 120 && v.length < MAXLEN);
+    lcdCounter.classList.toggle('max', v.length >= MAXLEN);
+    lcdText.scrollLeft = lcdText.scrollWidth;
+  }
+  function typeChar(ch){
+    if(input.value.length >= MAXLEN){ tone(170, 0.07, 'square', 0.07); return; }
+    input.value += ch;
+    renderLCD();
+  }
+  function backspace(){
+    input.value = input.value.slice(0, -1);
+    renderLCD();
+  }
+  input.addEventListener('input', renderLCD);
+
+  /* ---------- keyboard ---------- */
+  var LAYOUT = [
+    ['Q','W','E','R','T','Y','U','I','O','P'],
+    ['A','S','D','F','G','H','J','K','L'],
+    ['Z','X','C','V','B','N','M']
+  ];
+  var keyEls = {};
+  var keyboardEl = $('keyboard');
+
+  function makeKey(label, cls){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'key' + (cls ? ' ' + cls : '');
+    b.textContent = label;
+    b.setAttribute('aria-label',
+      label === 'DEL' ? 'Delete' : label === 'SPACE' ? 'Space' : label === 'TRANSMIT' ? 'Transmit' : label);
+    return b;
+  }
+  function pressAnim(el){
+    if(!el) return;
+    el.classList.add('pressed');
+    setTimeout(function(){ el.classList.remove('pressed'); }, 120);
+  }
+  function noFocusSteal(el){
+    el.addEventListener('pointerdown', function(e){ e.preventDefault(); });
+  }
+
+  LAYOUT.forEach(function(row){
+    var r = document.createElement('div');
+    r.className = 'keyrow';
+    row.forEach(function(ch){
+      var k = makeKey(ch);
+      keyEls[ch] = k;
+      k.addEventListener('pointerdown', function(e){
+        e.preventDefault(); pressAnim(k); typeChar(ch); sfxKey();
+      });
+      r.appendChild(k);
+    });
+    keyboardEl.appendChild(r);
+  });
+
+  var brow = document.createElement('div');
+  brow.className = 'keyrow';
+  var delKey = makeKey('DEL', 'wide');
+  var spaceKey = makeKey('SPACE', 'space');
+  var txKey = makeKey('TRANSMIT', 'wide green');
+  keyEls['DEL'] = delKey; keyEls['SPACE'] = spaceKey; keyEls['TRANSMIT'] = txKey;
+  delKey.addEventListener('pointerdown', function(e){ e.preventDefault(); pressAnim(delKey); backspace(); sfxClick(); });
+  spaceKey.addEventListener('pointerdown', function(e){ e.preventDefault(); pressAnim(spaceKey); typeChar(' '); sfxKey(); });
+  txKey.addEventListener('pointerdown', function(e){ e.preventDefault(); pressAnim(txKey); transmit(); });
+  brow.appendChild(delKey); brow.appendChild(spaceKey); brow.appendChild(txKey);
+  keyboardEl.appendChild(brow);
+
+  /* ---------- physical keyboard sync ---------- */
+  document.addEventListener('keydown', function(e){
+    if(e.metaKey || e.ctrlKey || e.altKey) return;
+    // Link terminal owns its interaction: its buttons must never leak
+    // keystrokes (or Enter) into the message composer. The pager keyboard
+    // keeps its existing behavior; the composer is the only text field left.
+    if(e.target && e.target.closest && e.target.closest('#linkbar')) return;
+    var k = e.key;
+    if(k === 'Enter'){ e.preventDefault(); pressAnim(keyEls['TRANSMIT']); transmit(); return; }
+    if(k === 'Backspace'){
+      pressAnim(keyEls['DEL']);
+      if(document.activeElement !== input){ e.preventDefault(); backspace(); }
+      sfxClick();
+      return;
+    }
+    if(k.length === 1){
+      var up = k.toUpperCase();
+      if(keyEls[up]) pressAnim(keyEls[up]);
+      if(k === ' ') pressAnim(keyEls['SPACE']);
+      if(document.activeElement !== input){
+        e.preventDefault();
+        typeChar(k);
+      }
+      sfxKey();
+    }
+  });
+
+  /* ---------- focus / status ---------- */
+  var sledLink = $('sledLink');
+  var sledTx = $('sledTx');
+  $('lcdWrap').addEventListener('click', function(){ input.focus(); });
+  // NOTE (Phase 4): LINK LED is driven by net connection state below,
+  // no longer by input focus.
+  function flashTx(){
+    sledTx.classList.add('on');
+    setTimeout(function(){ sledTx.classList.remove('on'); }, 900);
+  }
+  setTimeout(function(){
+    try{ input.focus({ preventScroll: true }); }catch(err){ try{ input.focus(); }catch(e2){} }
+  }, 250);
+
+  /* ---------- Phase 4: link terminal — no-console pairing, same CRT language -----
+     Pure UI layer: all truth comes from net.js events, server stays authoritative. */
+  var linkState = $('linkState'), linkCode = $('linkCode'), linkUrl = $('linkUrl');
+  var linkCodeGroup = $('linkCodeGroup'), linkUrlGroup = $('linkUrlGroup');
+  var durGroup = $('durGroup'), timerGroup = $('timerGroup'), extendGroup = $('extendGroup');
+  var timeLeft = $('timeLeft');
+  var btnInvite = $('btnInvite'), btnCopy = $('btnCopy'), btnAddTime = $('btnAddTime');
+  var btnAccept = $('btnAccept'), btnReject = $('btnReject');
+  var btnDisconnect = $('btnDisconnect'), btnClose = $('btnClose'), btnInfo = $('btnInfo');
+  var myInvite = null, myInviteUrl = null, incomingCode = null, netRef = null;
+  var details = true; // CLOSE hides detail UI only; the connection is untouched.
+  var selDur = 60;
+  var flashTimer = 0, copyTimer = 0;
+
+  function showBtn(el, on) { el.hidden = !on; }
+  function showGroup(el, on) { if (el) el.hidden = !on; }
+  function setBar(text, hot) {
+    linkState.textContent = text;
+    linkState.classList.toggle('hot', !!hot);
+  }
+  function setCode(code) {
+    if (code) { linkCode.textContent = code; linkCodeGroup.hidden = false; }
+    else { linkCode.textContent = ''; linkCodeGroup.hidden = true; }
+  }
+  function setUrl(url) {
+    if (url) { linkUrl.textContent = url; linkUrlGroup.hidden = false; }
+    else { linkUrl.textContent = ''; linkUrlGroup.hidden = true; }
+  }
+  function setLed(mode) { // 'on' | 'blink' | 'off'
+    sledLink.classList.toggle('on', mode === 'on');
+    sledLink.classList.toggle('blink', mode === 'blink');
+  }
+  // LED tells one story with the bar: on = peer linked, blink = waiting on a
+  // peer (invite out / request in / join in flight incl. /connect), off = idle.
+  function refreshLed() {
+    var st = netRef ? netRef.state.connectionState : 'DISCONNECTED';
+    if (st === 'CONNECTED') setLed('on');
+    else if (st === 'DISCONNECTED') setLed('off');
+    else if (myInvite || incomingCode || pendingJoin || (netRef && netRef.state.pendingInviteCode)) setLed('blink');
+    else setLed('off');
+  }
+  // Terminal print: unhide a group and stagger its lines in with the same
+  // overshoot easing as the card entrance. Cleans up after itself so later
+  // :active keycap presses keep working (fill mode would otherwise pin them).
+  function printIn(el, delayMs) {
+    if (!el) return;
+    el.classList.remove('print');
+    void el.offsetWidth;
+    el.style.animationDelay = (delayMs || 0) + 'ms';
+    el.classList.add('print');
+    setTimeout(function () {
+      el.classList.remove('print');
+      el.style.animationDelay = '';
+    }, (delayMs || 0) + 550);
+  }
+  function revealGroup(groupEl) {
+    if (!groupEl) return;
+    groupEl.hidden = false;
+    var kids = groupEl.querySelectorAll('.linkterm-label, .lkey, .linkterm-code, .linkterm-url, .linkterm-time');
+    for (var i = 0; i < kids.length; i++) printIn(kids[i], i * 70);
+  }
+  // Minimal mode (after CLOSE): state text + INFO only. Everything detail
+  // hides but nothing disconnects; INFO (or the next state change) restores.
+  function applyDetails() {
+    var connected = netRef && netRef.state.connectionState === 'CONNECTED';
+    if (details || !(myInvite || connected)) { showBtn(btnInfo, false); return; }
+    showGroup(durGroup, false); showGroup(linkCodeGroup, false); showGroup(linkUrlGroup, false);
+    showGroup(timerGroup, false); showGroup(extendGroup, false);
+    showBtn(btnInvite, false); showBtn(btnCopy, false); showBtn(btnDisconnect, false);
+    showBtn(btnAddTime, false); showBtn(btnAccept, false); showBtn(btnReject, false);
+    showBtn(btnClose, false); showBtn(btnInfo, true);
+  }
+  function uiOffline() {
+    myInvite = null; myInviteUrl = null; incomingCode = null;
+    pendingJoin = null; clearNotice();
+    details = true;
+    setBar('LINK ● OFFLINE', false); setCode(null); setUrl(null);
+    showGroup(durGroup, false); showGroup(timerGroup, false); showGroup(extendGroup, false);
+    selDur = 60; markDur();
+    showBtn(btnInvite, true); showBtn(btnCopy, false); showBtn(btnDisconnect, false);
+    showBtn(btnAddTime, false); showBtn(btnAccept, false); showBtn(btnReject, false);
+    showBtn(btnClose, false);
+    refreshLed();
+    applyDetails();
+  }
+  // Intermediate stage: INVITE reveals the duration picker, nothing
+  // is sent to the network yet.
+  function uiPickDur() {
+    setBar('LINK ● OFFLINE', false); setCode(null); setUrl(null);
+    showGroup(timerGroup, false); showGroup(extendGroup, false);
+    showBtn(btnInvite, false); showBtn(btnCopy, false); showBtn(btnDisconnect, false);
+    showBtn(btnAddTime, false); showBtn(btnAccept, false); showBtn(btnReject, false);
+    showBtn(btnClose, false);
+    revealGroup(durGroup);
+    refreshLed();
+    applyDetails();
+  }
+  function uiInviteReady(code) {
+    incomingCode = null;
+    details = true;
+    setBar('LINK ● WAITING', true); setCode(code); setUrl(myInviteUrl);
+    showGroup(durGroup, false); showGroup(timerGroup, false); showGroup(extendGroup, false);
+    showBtn(btnInvite, false); showBtn(btnAddTime, false);
+    showBtn(btnAccept, false); showBtn(btnReject, false);
+    revealGroup(linkCodeGroup);
+    revealGroup(linkUrlGroup);
+    showBtn(btnCopy, true); printIn(btnCopy, 320);
+    showBtn(btnDisconnect, true); printIn(btnDisconnect, 390);
+    showBtn(btnClose, true); printIn(btnClose, 460);
+    refreshLed();
+    applyDetails();
+  }
+  function uiJoining() {
+    setBar('LINK ● WAITING', true); setCode(null); setUrl(null);
+    showGroup(durGroup, false); showGroup(timerGroup, false); showGroup(extendGroup, false);
+    showBtn(btnInvite, false); showBtn(btnCopy, false); showBtn(btnDisconnect, false);
+    showBtn(btnAddTime, false); showBtn(btnAccept, false); showBtn(btnReject, false);
+    showBtn(btnClose, false);
+    refreshLed();
+    applyDetails();
+  }
+  function uiIncoming() {
+    details = true; // a decision is required — never stay minimal here.
+    setBar('LINK ● INCOMING', true); setCode(incomingCode); setUrl(null);
+    showGroup(durGroup, false); showGroup(timerGroup, false); showGroup(extendGroup, false);
+    showBtn(btnInvite, false); showBtn(btnCopy, false); showBtn(btnDisconnect, false);
+    showBtn(btnAddTime, false);
+    showBtn(btnAccept, true); showBtn(btnReject, true);
+    showBtn(btnClose, false);
+    refreshLed();
+    applyDetails();
+  }
+  function uiConnected() {
+    incomingCode = null;
+    details = true;
+    setBar('LINK ● CONNECTED', true); setCode(null); setUrl(null);
+    showGroup(durGroup, false); showGroup(timerGroup, true); showGroup(extendGroup, false);
+    showBtn(btnInvite, false); showBtn(btnCopy, false);
+    showBtn(btnDisconnect, true); showBtn(btnAddTime, true);
+    showBtn(btnAccept, false); showBtn(btnReject, false);
+    showBtn(btnClose, true);
+    tickTimer();
+    refreshLed();
+    applyDetails();
+  }
+  // Countdown display only — expiry itself is decided by the server.
+  function fmtLeft(ms) {
+    if (ms <= 0) return '00:00';
+    var s = Math.floor(ms / 1000);
+    var m = Math.floor(s / 60);
+    var r = s % 60;
+    return m + ':' + (r < 10 ? '0' : '') + r;
+  }
+  function tickTimer() {
+    if (netRef && netRef.state.connectionState === 'CONNECTED' && netRef.state.expiresAt) {
+      timeLeft.textContent = fmtLeft(netRef.state.expiresAt - Date.now());
+    } else {
+      timeLeft.textContent = '--:--';
+    }
+  }
+  setInterval(tickTimer, 1000);
+  function uiFlash(text, revert) {
+    setBar(text, true);
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(function () {
+      if (!netRef || netRef.state.connectionState === 'CONNECTED') return;
+      if (revert && revert.code) uiInviteReady(revert.code);
+      else if (incomingCode) uiIncoming();
+      else uiOffline();
+    }, 2600);
+  }
+  function copyText(t, done) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function () { done(true); }, function () { fallbackCopy(t, done); });
+    } else fallbackCopy(t, done);
+  }
+  function fallbackCopy(t, done) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta); done(!!ok);
+    } catch (e) { done(false); }
+  }
+
+  function markDur() {
+    var btns = durGroup.querySelectorAll('.dur');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('sel', Number(btns[i].getAttribute('data-min')) === selDur);
+    }
+  }
+  durGroup.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('.dur') : null;
+    if (!b || !netRef) return;
+    selDur = Number(b.getAttribute('data-min')) || 60;
+    markDur();
+    sfxKey();
+    netRef.createInvite(selDur).then(function (code) {
+      myInvite = code;
+      myInviteUrl = netRef.getInviteUrl(code);
+      uiInviteReady(code);
+      sfxDeliver();
+    }).catch(function () {
+      uiPickDur();
+      uiFlash('NO SIGNAL — RETRY', null);
+    });
+  });
+  markDur();
+
+  // Stage one: reveal the duration picker. Nothing is sent yet.
+  btnInvite.addEventListener('click', function () {
+    if (!netRef) return;
+    uiPickDur();
+    sfxKey();
+  });
+  btnCopy.addEventListener('click', function () {
+    if (!myInviteUrl) return;
+    copyText(myInviteUrl, function (ok) {
+      clearTimeout(copyTimer);
+      if (ok) {
+        btnCopy.textContent = '[ COPIED ✓ ]';
+        sfxDeliver();
+        copyTimer = setTimeout(function () { btnCopy.textContent = '[ COPY LINK ]'; }, 1600);
+      } else {
+        uiFlash('COPY FAILED — SELECT URL', myInvite ? { code: myInvite } : null);
+      }
+    });
+  });
+  btnAccept.addEventListener('click', function () {
+    if (!netRef || !incomingCode) return;
+    netRef.acceptConnection(incomingCode).catch(function () {
+      uiFlash('ACCEPT FAILED', myInvite ? { code: myInvite } : null);
+    });
+  });
+  btnReject.addEventListener('click', function () {
+    if (!netRef || !incomingCode) return;
+    var code = incomingCode;
+    incomingCode = null;
+    netRef.rejectConnection(code).catch(function () {});
+    // Invite stays reusable (Phase 2 lifecycle) — show it again.
+    if (myInvite) uiInviteReady(myInvite);
+    else uiOffline();
+  });
+  // CLOSE hides the invite UI only. Connection, invite, timer all continue.
+  btnClose.addEventListener('click', function () {
+    details = false;
+    applyDetails();
+    sfxKey();
+  });
+  // INFO reopens the hidden details for the live invite/connection.
+  btnInfo.addEventListener('click', function () {
+    details = true;
+    if (netRef && netRef.state.connectionState === 'CONNECTED') uiConnected();
+    else if (myInvite) uiInviteReady(myInvite);
+    else uiOffline();
+    sfxKey();
+  });
+  // DISCONNECT really ends the pair via the existing close lifecycle:
+  // the socket drops, the server cleans up + notifies the peer.
+  btnDisconnect.addEventListener('click', function () {
+    if (!netRef) return;
+    try { netRef.disconnect(); } catch (e) {}
+    if (netRef.state.connectionState === 'DISCONNECTED') uiOffline();
+    sfxKey();
+  });
+  btnAddTime.addEventListener('click', function () {
+    // Toggle the extend picker; picking a value extends the SAME connection.
+    showGroup(extendGroup, extendGroup.hidden);
+    sfxKey();
+  });
+  extendGroup.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('.ext') : null;
+    if (!b || !netRef) return;
+    var mins = Number(b.getAttribute('data-min'));
+    netRef.extendConnection(mins).then(function () {
+      showGroup(extendGroup, false);
+      sfxDeliver();
+    }).catch(function () {
+      showGroup(extendGroup, false);
+      uiFlash('EXTEND FAILED', null);
+    });
+  });
+
+  /* ---------- cards: spawn + typewriter ---------- */
+  var cardsLayer = $('cardsLayer');
+  var zTop = 100;
+
+  function two(n){ return (n<10?'0':'')+n; }
+  function nowStamp(){
+    var d = new Date();
+    return two(d.getHours())+':'+two(d.getMinutes())+':'+two(d.getSeconds());
+  }
+
+  function typeInto(card, text){
+    var msgEl = card.querySelector('.card-msg');
+    var caret = card.querySelector('.card-caret');
+    var delivered = card.querySelector('.card-delivered') || card.querySelector('.card-arrived');
+    var i = 0;
+    function step(){
+      if(i >= text.length){
+        caret.style.display = 'none';
+        delivered.classList.add('show');
+        sfxDeliver();
+        return;
+      }
+      var ch = text.charAt(i++);
+      msgEl.textContent += ch;
+      sfxClick();
+      var delay = 25 + Math.random()*30;
+      if(ch === ' ') delay += 18;
+      if(ch === '.' || ch === ',' || ch === '!') delay += 30;
+      setTimeout(step, delay);
+    }
+    setTimeout(step, 280);
+  }
+
+  /* ---------- card dismissal: single shared exit language ----------
+     Reverse of the print entrance: drop a few px + fade, staggered by the
+     caller. Inline transform is set explicitly because spawnCard pins
+     scale(1) rotate() inline, which would otherwise override the .bye CSS. */
+  function dismissCard(card, delayMs, removeAfterMs){
+    if (!card || !card.parentNode) return;
+    var rot = parseFloat(card.dataset.rot) || 0;
+    card.classList.remove('enter');
+    card.style.transform = 'translateY(10px) rotate(' + rot + 'deg)';
+    card.classList.add('bye');
+    card.style.transitionDelay = (delayMs || 0) + 'ms';
+    setTimeout(function(){
+      card.style.transitionDelay = '';
+      if(card.parentNode) card.parentNode.removeChild(card);
+    }, (removeAfterMs == null ? (delayMs || 0) + 280 : removeAfterMs));
+  }
+
+  function spawnCard(text, dir){
+    var card = document.createElement('article');
+    // dir: 'sent' (local TRANSMIT → right) or 'received' (peer → left).
+    // Visuals identical; only the spawn side differs. Drag/delete/animation untouched.
+    dir = (dir === 'received') ? 'received' : 'sent';
+    card.className = 'card ' + dir;
+    card.style.zIndex = ++zTop;
+    var rot = (Math.random()*6 - 3);
+    card.dataset.rot = rot;
+    card.style.setProperty('--rot', rot + 'deg');
+    card.style.transform = 'scale(1) rotate(' + rot + 'deg)';
+    card.innerHTML =
+      '<button class="card-del" type="button" aria-label="Delete card">\u00d7</button>' +
+      '<header class="card-head">' +
+        '<span class="card-brand">\u25e4 MOTOROLA FIX BEEPER \u25e2</span>' +
+        '<span class="card-time">' + nowStamp() + '</span>' +
+      '</header>' +
+      '<div class="card-perf"></div>' +
+      '<div class="card-body">' +
+        '<span class="card-msg"></span><span class="card-caret"></span>' +
+      '</div>' +
+      '<footer class="card-foot">' +
+        (dir === 'received'
+          ? '<span class="card-arrived">\u2190 RECEIVED</span>'
+          : '<span class="card-delivered">\u2713 DELIVERED</span>') +
+      '</footer>';
+
+    // start near the bottom of the device: sent → right side, received → left.
+    // Vertical placement unchanged; left/top clamped to the viewport (incl. mobile).
+    // Pinned toward the viewport edges so the side holds at any window width.
+    var rect = $('device').getBoundingClientRect();
+    card.style.left = '0px'; card.style.top = '0px';
+    card.style.visibility = 'hidden';
+    cardsLayer.appendChild(card);
+
+    var cw = card.offsetWidth, ch = card.offsetHeight;
+    var sx = (dir === 'received')
+      ? rect.left + 8 + (Math.random()*16 - 8)
+      : rect.right - cw - 8 + (Math.random()*16 - 8);
+    var sy = rect.bottom - 46 + (Math.random()*22 - 11);
+    var vw = window.innerWidth, vh = window.innerHeight;
+    sx = Math.max(8, Math.min(vw - cw - 8, sx));
+    sy = Math.max(8, Math.min(vh - ch - 8, sy));
+    card.style.left = Math.round(sx) + 'px';
+    card.style.top = Math.round(sy) + 'px';
+    card.style.visibility = '';
+
+    card.classList.add('enter');
+    var entered = false;
+    card.addEventListener('animationend', function onEnd(){
+      entered = true;
+      card.classList.remove('enter');
+      card.removeEventListener('animationend', onEnd);
+    });
+    // Fallback: if animationend never fires (background tab, reduced motion),
+    // don't leave the enter fill-mode stuck on the card.
+    setTimeout(function(){ if (!entered) card.classList.remove('enter'); }, 800);
+
+    card.querySelector('.card-del').addEventListener('pointerdown', function(e){ e.stopPropagation(); });
+    card.querySelector('.card-del').addEventListener('click', function(e){
+      e.stopPropagation();
+      dismissCard(card, 0, 280);
+    });
+
+    makeDraggable(card);
+    typeInto(card, text);
+    return card;
+  }
+
+  /* ---------- dragging (mouse + touch) ---------- */
+  function makeDraggable(card){
+    var dragging = false, pid = null, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+
+    card.addEventListener('pointerdown', function(e){
+      if(e.target.closest && e.target.closest('.card-del')) return;
+      if(e.pointerType === 'mouse' && e.button !== 0) return;
+      dragging = true; pid = e.pointerId;
+      try{ card.setPointerCapture(pid); }catch(err){}
+      startX = e.clientX; startY = e.clientY;
+      startLeft = parseFloat(card.style.left) || 0;
+      startTop = parseFloat(card.style.top) || 0;
+      var rot = parseFloat(card.dataset.rot) || 0;
+      card.classList.remove('enter');
+      card.classList.add('dragging');
+      card.style.transform = 'scale(1.04) rotate(' + (rot + 3) + 'deg)';
+      card.style.zIndex = ++zTop;
+      e.preventDefault();
+    });
+
+    card.addEventListener('pointermove', function(e){
+      if(!dragging || e.pointerId !== pid) return;
+      var nl = startLeft + (e.clientX - startX);
+      var nt = startTop + (e.clientY - startY);
+      var maxL = window.innerWidth - card.offsetWidth - 4;
+      var maxT = window.innerHeight - card.offsetHeight - 4;
+      nl = Math.max(4, Math.min(maxL, nl));
+      nt = Math.max(4, Math.min(maxT, nt));
+      card.style.left = nl + 'px';
+      card.style.top = nt + 'px';
+    });
+
+    function endDrag(e){
+      if(!dragging || (e && e.pointerId !== pid)) return;
+      dragging = false;
+      try{ card.releasePointerCapture(pid); }catch(err){}
+      card.classList.remove('dragging');
+      var rot = parseFloat(card.dataset.rot) || 0;
+      card.style.transform = 'scale(1) rotate(' + rot + 'deg)';
+    }
+    card.addEventListener('pointerup', endDrag);
+    card.addEventListener('pointercancel', endDrag);
+    card.addEventListener('lostpointercapture', endDrag);
+  }
+
+  /* ---------- transmit ---------- */
+  // Command priority: /clear → /connect CODE → malformed /connect → pending
+  // gate → normal message. Commands are local: no slip, no WebSocket send.
+  var pendingJoin = null; // invite code awaiting creator approval (local gate)
+  function transmit(){
+    var text = input.value.trim();
+    sfxBeepBeep();
+    flashTx();
+    // Local command: exact match only (case-sensitive). Slips animate out
+    // with the existing delete language (staggered), then leave the DOM.
+    // Creates no slip, sends nothing — peer never hears about it.
+    if (text === '/clear') {
+      var gone = Array.prototype.slice.call(cardsLayer.children);
+      for (var gi = 0; gi < gone.length; gi++) {
+        dismissCard(gone[gi], gi * 60, gi * 60 + 280);
+      }
+      input.value = '';
+      renderLCD();
+      return;
+    }
+    var cm = text.match(/^\/connect\s+(\S+)\s*$/);
+    if (cm) {
+      input.value = '';
+      renderLCD();
+      doConnectCommand(cm[1]);
+      return;
+    }
+    if (/^\/connect(\s|\/|$)/.test(text)) {
+      // Looks like /connect but malformed (bare, trailing slash, extra args).
+      input.value = '';
+      showNotice('INVALID LINK CODE', 2600);
+      return;
+    }
+    if (pendingJoin) {
+      // Waiting on approval: hold the composer, keep showing the status.
+      input.value = '';
+      showNotice('WAITING FOR CONNECTION APPROVAL...');
+      return;
+    }
+    if(text && typeof spawnCard === 'function'){ spawnCard(text, 'sent'); }
+    // Mirror to the connected peer. Offline / unconnected stays
+    // local-only — sendMessage rejects there and we stay silent on purpose.
+    try {
+      if (text && window.__beeperNet) {
+        var p = window.__beeperNet.sendMessage(text);
+        if (p && p.catch) p.catch(function () {});
+      }
+    } catch (e) {}
+    input.value = '';
+    renderLCD();
+  }
+  // Join via the existing pairing API. Never spawnCard/sendMessage here.
+  function doConnectCommand(raw) {
+    var code = String(raw || '').trim().toUpperCase();
+    if (!window.__beeperNet) { showNotice('NO SIGNAL — RETRY', 2600); return; }
+    pendingJoin = code;
+    refreshLed();
+    showNotice('WAITING FOR CONNECTION APPROVAL...');
+    try {
+      window.__beeperNet.joinInvite(code).then(function () {
+        // Still needs the creator's ACCEPT; notice stays until then.
+        if (pendingJoin) showNotice('WAITING FOR CONNECTION APPROVAL...');
+      }).catch(function () {
+        pendingJoin = null;
+        refreshLed();
+        showNotice('INVALID LINK CODE', 2600);
+      });
+    } catch (e) {
+      pendingJoin = null;
+      refreshLed();
+      showNotice('INVALID LINK CODE', 2600);
+    }
+  }
+
+  /* ---------- floating dust ---------- */
+  (function makeDust(){
+    var layer = $('dust');
+    var n = window.innerWidth < 600 ? 16 : 30;
+    for(var i = 0; i < n; i++){
+      var s = document.createElement('span');
+      var size = 1 + Math.random()*2.4;
+      s.style.width = size + 'px';
+      s.style.height = size + 'px';
+      s.style.left = (Math.random()*100) + '%';
+      s.style.setProperty('--dx', (Math.random()*90 - 45) + 'px');
+      var dur = 12 + Math.random()*16;
+      s.style.animationDuration = dur + 's';
+      s.style.animationDelay = (-Math.random()*dur) + 's';
+      layer.appendChild(s);
+    }
+  })();
+
+  /* ---------- keep cards on-screen on resize ---------- */
+  window.addEventListener('resize', function(){
+    var cards = cardsLayer.children;
+    for(var i = 0; i < cards.length; i++){
+      var c = cards[i];
+      var l = parseFloat(c.style.left) || 0;
+      var t = parseFloat(c.style.top) || 0;
+      c.style.left = Math.max(4, Math.min(window.innerWidth - c.offsetWidth - 4, l)) + 'px';
+      c.style.top = Math.max(4, Math.min(window.innerHeight - c.offsetHeight - 4, t)) + 'px';
+    }
+  });
+
+  renderLCD();
+
+  /* ---------- Phase 3: incoming peer messages reuse the same paper slip ----------
+     Runs before deferred net.js; net.js calls it back once __beeperNet exists. */
+  window.__beeperOnNetReady = function (net) {
+    if (!net || !net.on) return;
+    netRef = net;
+    net.on('message', function (m) {
+      if (m && typeof m.text === 'string' && m.text.trim()) {
+        spawnCard(m.text.slice(0, 160), 'received');
+      }
+    });
+    // LED follows socket + pairing context together (see refreshLed).
+    net.on('status', function (s) {
+      if (!s) return;
+      if (s.connectionState === 'DISCONNECTED') uiOffline(); // invites died with the socket
+      else refreshLed();
+    });
+    net.on('invite-created', function (m) {
+      if (m && m.code) { myInvite = m.code; myInviteUrl = net.getInviteUrl(m.code); }
+    });
+    net.on('auto-join', function () { uiJoining(); });
+    net.on('connection-pending', function () { uiJoining(); });
+    net.on('connection-request', function (m) {
+      if (net.state.connectionState === 'CONNECTED') return;
+      incomingCode = m && m.code;
+      uiIncoming();
+      sfxBeepBeep();
+    });
+    net.on('connection-established', function () {
+      try { net.state.pendingInviteCode = null; } catch (e) {}
+      myInvite = null; myInviteUrl = null; // invite consumed — no longer "waiting"
+      pendingJoin = null; clearNotice(); // composer back to normal for messaging
+      uiConnected();
+      sfxDeliver();
+    });
+    net.on('connection-extended', function (m) {
+      showGroup(extendGroup, false);
+      tickTimer();
+      sfxDeliver();
+      // Brief confirmation in the bar without disturbing CONNECTED state.
+      if (m && m.addedMin) {
+        var keep = linkState.textContent;
+        setBar('LINK ● +' + m.addedMin + ' MIN', true);
+        setTimeout(function () {
+          if (netRef && netRef.state.connectionState === 'CONNECTED') setBar('LINK ● CONNECTED', true);
+          else linkState.textContent = keep;
+        }, 2000);
+      }
+    });
+    net.on('connection-expired', function () {
+      // Treated exactly like a lost peer: link off, controls reset, no rejoin.
+      try { net.state.pendingInviteCode = null; } catch (e) {}
+      showGroup(timerGroup, false); showGroup(extendGroup, false);
+      uiFlash('LINK ● PEER LOST', null);
+    });
+    net.on('connection-rejected', function () {
+      try { net.state.pendingInviteCode = null; } catch (e) {}
+      pendingJoin = null; refreshLed();
+      showNotice('CONNECTION DENIED', 2600);
+      uiFlash('LINK ● DENIED', null);
+    });
+    net.on('connection-cancelled', function () {
+      incomingCode = null;
+      try { net.state.pendingInviteCode = null; } catch (e) {}
+      pendingJoin = null; refreshLed();
+      showNotice('REQUEST GONE', 2600);
+      uiFlash('REQUEST GONE', myInvite ? { code: myInvite } : null);
+    });
+    net.on('peer-disconnected', function () {
+      try { net.state.pendingInviteCode = null; } catch (e) {}
+      uiFlash('LINK ● PEER LOST', null);
+    });
+    // B-side opened via /connect/<code>: show joining immediately.
+    // (The /connect COMMAND path uses pendingJoin + the LCD notice instead.)
+    try {
+      if (net.state && net.state.pendingInviteCode) {
+        uiJoining();
+      }
+    } catch (e) {}
+  };
+
+})();
+</script>
+<script src="/net.js" defer></script>
+</body>
+</html>
