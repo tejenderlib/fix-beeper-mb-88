@@ -12,8 +12,16 @@
 //   __beeperNet.on('connection-extended', fn)   -> both sides: {expiresAt, addedMin}
 //   __beeperNet.on('connection-expired', fn)    -> pair reaped at expiresAt
 //   __beeperNet.on('peer-disconnected', fn)
+//   await __beeperNet.sendMessage(text)      -> encrypts locally, relays {iv,ciphertext}
+//   __beeperNet.on('message', fn)            -> {messageId, text, timestamp} (decrypted)
+//   __beeperNet.on('crypto-ready', fn)       -> {ready:true} once the session key exists
+//   __beeperNet.on('error', fn)             -> 'decrypt-failed' etc.
 //   __beeperNet.disconnect()                    -> close socket once, no redial
 // Expiry is server-authoritative; state.expiresAt is display-only.
+//
+// Phase 5 (E2EE): ephemeral P-256 ECDH per session, HKDF-SHA256 -> AES-256-GCM.
+// The socket only ever carries {iv, ciphertext} and public keys. The server
+// relays both; it never holds a private key and never reads a message.
 (function () {
   'use strict';
   if (window.__beeperNet) return;
@@ -39,6 +47,18 @@
   var listeners = {};
   var pendings = []; // {kind, code, resolve, reject, timer}
   var autoJoinTried = false;
+
+  // Phase 5: one ephemeral ECDH key pair + one AES-GCM session key per peer
+  // session. Both live here and nowhere else — the private key is never
+  // exported, never sent, and never touches the socket. resetSession() drops
+  // all of it, so a new pairing can never inherit the previous key.
+  var session = { keyPair: null, peerPublicKey: null, key: null };
+
+  function resetSession() {
+    session.keyPair = null;
+    session.peerPublicKey = null;
+    session.key = null;
+  }
 
   function on(evt, fn) {
     (listeners[evt] = listeners[evt] || []).push(fn);
@@ -122,6 +142,71 @@
     if (rawSend({ type: 'join-invite', code: code })) emit('auto-join', { code: code });
   }
 
+  /* ---------- Phase 5: end-to-end encryption ---------- */
+  // A fresh ephemeral pair per session, published through the server. The
+  // server relays the public key and nothing else; it never sees a private
+  // key and never derives anything.
+  function startKeyExchange() {
+    var bc = window.__beeperCrypto;
+    if (!bc) { emit('error', { error: 'crypto-unavailable' }); return; }
+    resetSession();
+    bc.generateKeyPair().then(function (kp) {
+      // A reset that landed while we were generating (peer vanished, socket
+      // closed) must win — do not resurrect a key for a dead session.
+      if (!state.peerId) return;
+      session.keyPair = kp;
+      return bc.exportPublicKey(kp.publicKey).then(function (pub) {
+        rawSend({ type: 'key-exchange', publicKey: pub });
+      });
+    }).catch(function () {
+      emit('error', { error: 'key-exchange-failed' });
+    });
+  }
+
+  // Peer key in: derive the shared AES key locally. The server is already
+  // finished with the bytes at this point.
+  function handlePeerKey(msg) {
+    var bc = window.__beeperCrypto;
+    if (!bc || !session.keyPair || !msg || typeof msg.publicKey !== 'string') {
+      emit('error', { error: 'key-exchange-failed' });
+      return;
+    }
+    var pair = session.keyPair;
+    bc.importPublicKey(msg.publicKey).then(function (peerKey) {
+      return bc.deriveSharedKey(pair.privateKey, peerKey).then(function (key) {
+        if (session.keyPair !== pair) return; // session ended mid-derive
+        session.peerPublicKey = peerKey;
+        session.key = key;
+        emit('crypto-ready', { ready: true });
+      });
+    }).catch(function () {
+      emit('error', { error: 'key-exchange-failed' });
+    });
+  }
+
+  // Ciphertext in: decrypt locally, then emit the SAME shape the UI already
+  // consumes. A tampered or malformed envelope fails authentication and
+  // produces no 'message' event at all.
+  function decryptIncoming(msg) {
+    if (!session.key) {
+      emit('error', { error: 'decrypt-failed', messageId: msg.messageId });
+      return;
+    }
+    window.__beeperCrypto.decrypt(session.key, msg).then(function (text) {
+      if (typeof text !== 'string' || !text.trim()) {
+        emit('error', { error: 'decrypt-failed', messageId: msg.messageId });
+        return;
+      }
+      emit('message', {
+        messageId: msg.messageId,
+        text: text,
+        timestamp: msg.timestamp,
+      });
+    }).catch(function () {
+      emit('error', { error: 'decrypt-failed', messageId: msg.messageId });
+    });
+  }
+
   function handleServerMessage(msg) {
     switch (msg.type) {
       case 'welcome':
@@ -153,6 +238,8 @@
         setStatus('CONNECTED');
         emit('connection-established', msg);
         settleAll('accept', null, true, msg.peerId);
+        // Ephemeral keys for THIS session only — the old ones are already gone.
+        startKeyExchange();
         break;
       case 'connection-rejected':
         emit('connection-rejected', msg);
@@ -164,6 +251,7 @@
       case 'peer-disconnected':
         state.peerId = null;
         state.expiresAt = null;
+        resetSession();
         setStatus('WAITING');
         emit('peer-disconnected', msg);
         break;
@@ -172,6 +260,7 @@
         // peer, no auto-reconnect — the connection is really over.
         state.peerId = null;
         state.expiresAt = null;
+        resetSession();
         setStatus('WAITING');
         emit('connection-expired', msg);
         emit('peer-disconnected', msg);
@@ -184,9 +273,14 @@
       case 'connection-cancelled':
         emit('connection-cancelled', msg);
         break;
+      case 'key-exchange':
+        // Public key from our actual peer. Never from a client-named id.
+        handlePeerKey(msg);
+        break;
       case 'message':
-        // Incoming peer text. UI subscribes via on('message'); net.js never touches DOM.
-        if (msg && typeof msg.text === 'string') emit('message', msg);
+        // Encrypted peer payload. net.js decrypts and re-emits the pre-Phase-5
+        // shape, so the UI subscribes exactly as it did.
+        if (msg && typeof msg.ciphertext === 'string') decryptIncoming(msg);
         break;
       case 'error':
         emit('error', msg);
@@ -225,6 +319,9 @@
     ws.addEventListener('close', function () {
       state.peerId = null;
       state.expiresAt = null;
+      // Never carry a session key across a socket: the next pairing is a new
+      // session and must derive a new one.
+      resetSession();
       setStatus('DISCONNECTED');
       autoJoinTried = false; // retry auto-join after reconnect
       settleAll('create', null, false, new Error('disconnected'));
@@ -244,17 +341,23 @@
     return { code: code };
   }
 
+  // The 160-character limit lives here, in the client, because the client is
+  // the only side that can read the message. Encryption happens locally and
+  // only {iv, ciphertext} goes on the wire — the server never sees `text`.
   function sendMessage(text) {
     if (typeof text !== 'string' || !text.trim()) return Promise.reject(new Error('empty-message'));
-    if (text.trim().length > 160) return Promise.reject(new Error('message-too-long'));
+    var body = text.trim();
+    if (body.length > 160) return Promise.reject(new Error('message-too-long'));
     if (!isOpen()) return Promise.reject(new Error('not-connected'));
-    if (state.connectionState !== 'CONNECTED' || !state.peerId) {
+    if (state.connectionState !== 'CONNECTED' || !state.peerId || !session.key) {
       return Promise.reject(new Error('not-connected'));
     }
-    if (!rawSend({ type: 'message', text: text.trim() })) {
-      return Promise.reject(new Error('not-connected'));
-    }
-    return Promise.resolve(true);
+    return window.__beeperCrypto.encrypt(session.key, body).then(function (envelope) {
+      if (!rawSend({ type: 'message', iv: envelope.iv, ciphertext: envelope.ciphertext })) {
+        throw new Error('not-connected');
+      }
+      return true;
+    });
   }
 
   window.__beeperNet = {

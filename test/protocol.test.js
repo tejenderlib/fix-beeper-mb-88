@@ -8,6 +8,18 @@ import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer, pair, Client, CODE_RE, probeUntilError } from './helpers/client.js';
 
+// Phase 5: `message` carries {iv, ciphertext}, never plaintext. This dummy
+// envelope is only used where a test asserts pairing or lifetime, not crypto —
+// the encryption behaviour itself is covered in regression.test.js.
+const ENVELOPE = {
+  type: 'message',
+  iv: 'AAAAAAAAAAAAAAAA',
+  ciphertext: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8A',
+};
+// The dummy ciphertext must survive the server's base64 and size checks, or
+// the test would pass for the wrong reason (invalid-message, not not-connected).
+assert.ok(ENVELOPE.ciphertext.length % 4 === 0, 'ENVELOPE ciphertext must be valid base64');
+
 describe('Phase 1 — transport', () => {
   let srv;
   const open = [];
@@ -45,6 +57,20 @@ describe('Phase 1 — transport', () => {
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type') || '', /javascript/);
     assert.match(await res.text(), /__beeperNet/);
+  });
+
+  test('serves client/crypto.js and the UI loads it before net.js', async () => {
+    const res = await fetch(`${srv.base}/crypto.js`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type') || '', /javascript/);
+    assert.match(await res.text(), /__beeperCrypto/);
+
+    const html = await (await fetch(`${srv.base}/`)).text();
+    const cryptoAt = html.indexOf('src="/crypto.js"');
+    const netAt = html.indexOf('src="/net.js"');
+    assert.ok(cryptoAt > -1, 'the UI must load crypto.js');
+    assert.ok(netAt > -1, 'the UI must load net.js');
+    assert.ok(cryptoAt < netAt, 'crypto.js must be loaded before net.js');
   });
 
   test('rejects path traversal outside the client directory', async () => {
@@ -382,7 +408,7 @@ describe('Phase 2 — invites and pairing', () => {
     const again = await client();
     const idAfter = (await again.waitFor('welcome')).clientId;
     assert.notEqual(idBefore, idAfter, 'a new socket is a new client');
-    const err = await b.sendAndWait({ type: 'message', text: 'still paired?' }, 'error');
+    const err = await b.sendAndWait(ENVELOPE, 'error');
     assert.equal(err.error, 'not-connected', 'pair is broken by the disconnect');
   });
 });
@@ -458,8 +484,9 @@ describe('Phase 2 — connection lifetime', () => {
       const goneB = b.waitFor('connection-expired', { timeout: 10_000 });
       await Promise.all([goneA, goneB]);
 
-      // The pair is dead: no more relaying.
-      const err = await a.sendAndWait({ type: 'message', text: 'after expiry' }, 'error');
+      // The pair is dead: no more relaying. (Phase 5: an opaque envelope —
+      // these tests assert pairing, not payload.)
+      const err = await a.sendAndWait(ENVELOPE, 'error');
       assert.equal(err.error, 'not-connected');
 
       // The single-use invite was reaped, reported as simply not found.
