@@ -21,7 +21,7 @@ Two devices pair through a private invite code, then exchange pager-style messag
 
 > **Security note:** the encryption here is **not authenticated end-to-end encryption**. It defends message content against a passive or honest-but-curious relay, not against an active man-in-the-middle. See [Security limitations](#security-limitations).
 
-[![Live Demo](https://img.shields.io/badge/live%20demo-fix--beeper--mb--88-8bf03c?style=flat-square)](https://fix-beeper-mb-88.onrender.com)
+[![Watch MB-88 Demo](media/mb88-demo-poster.png)](media/mb88-demo.mp4)
 [![License: MIT](https://img.shields.io/badge/license-MIT-8bf03c?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square)](https://nodejs.org)
 
