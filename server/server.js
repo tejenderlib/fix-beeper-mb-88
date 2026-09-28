@@ -1,5 +1,11 @@
-// Phase 2: static server + WebSocket hello/ping + invite pairing (connections.js).
-// No chat messaging yet — that lands in Phase 3. No DB, no auth.
+// Phase 5: static server + WebSocket hello/ping + invite pairing (connections.js)
+// + end-to-end encrypted message relay. No DB, no auth.
+//
+// Phase 5 changes the relay, not the authority. The server still owns pairing,
+// lifetimes, messageId, and timestamp, and it still refuses every
+// client-supplied routing field. The only thing that changed is the payload:
+// the server now routes {iv, ciphertext} it cannot read, and relays public
+// keys it has no use for beyond forwarding them to the paired peer.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -51,6 +57,21 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocketServer({ server, maxPayload: 4096 });
 const peers = new Map(); // clientId -> ws
 const store = createConnectionStore();
+
+// Phase 5 bounds. An uncompressed P-256 point is 65 raw bytes -> 88 base64
+// chars, so MAX_B64 is generous headroom for a key that is well-formed.
+// MAX_CIPHERTEXT_B64 covers 160 UTF-8 chars worst case (4 bytes each) plus the
+// 16-byte GCM auth tag, base64-encoded, with slack.
+const MAX_B64 = 512;
+const MAX_CIPHERTEXT_B64 = 1024;
+
+// Base64 alphabet check only. The server has no key material, so there is
+// nothing to decode — it just refuses shapes that could never be a real key
+// or envelope instead of relaying obvious garbage into a peer's decryptor.
+const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+function isBase64(s) {
+  return s.length % 4 === 0 && s.length >= 4 && B64_RE.test(s);
+}
 
 function send(ws, obj) {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
@@ -155,20 +176,51 @@ wss.on('connection', (ws) => {
       sendTo(res.peerId, { type: 'connection-extended', expiresAt: res.expiresAt, addedMin: res.addedMin });
       return;
     }
-    // --- Peer messaging (no broadcast, server-authoritative) ---
-    if (msg.type === 'message') {
-      // Client sends ONLY {type, text}. messageId/senderId/peerId/roomId/
-      // timestamp from the client are ignored — never trusted.
-      if (typeof msg.text !== 'string') {
+    // --- Phase 5: public-key exchange (relay only, never consumed) ---
+    // The server does not derive, store, or inspect keys. It checks that the
+    // sender is in a live pair, then forwards the public key to that one peer.
+    // A client-supplied peerId is ignored exactly as it is for `message`.
+    if (msg.type === 'key-exchange') {
+      if (typeof msg.publicKey !== 'string' || !msg.publicKey) {
         send(ws, { type: 'error', error: 'invalid-message' });
         return;
       }
-      const text = msg.text.trim();
-      if (!text) {
-        send(ws, { type: 'error', error: 'empty-message' });
+      if (!isBase64(msg.publicKey) || msg.publicKey.length > MAX_B64) {
+        send(ws, { type: 'error', error: 'invalid-public-key' });
         return;
       }
-      if (text.length > 160) {
+      const peerId = store.getPeer(clientId);
+      if (!peerId || !isConnected(peerId) || !store.isLive(clientId)) {
+        send(ws, { type: 'error', error: 'not-connected' });
+        return;
+      }
+      sendTo(peerId, { type: 'key-exchange', publicKey: msg.publicKey });
+      return;
+    }
+    // --- Encrypted peer messaging (no broadcast, server-authoritative) ---
+    if (msg.type === 'message') {
+      // Phase 5: the relay carries only {iv, ciphertext}. A plaintext `text`
+      // is rejected outright rather than silently dropped, so a client that
+      // forgets to encrypt fails loudly instead of leaking content past the
+      // E2EE boundary. messageId/timestamp/senderId/peerId/roomId from the
+      // client are ignored — never trusted.
+      if (msg.text !== undefined) {
+        send(ws, { type: 'error', error: 'plaintext-not-allowed' });
+        return;
+      }
+      if (typeof msg.iv !== 'string' || typeof msg.ciphertext !== 'string' ||
+          !msg.iv || !msg.ciphertext) {
+        send(ws, { type: 'error', error: 'invalid-message' });
+        return;
+      }
+      if (!isBase64(msg.iv) || !isBase64(msg.ciphertext)) {
+        send(ws, { type: 'error', error: 'invalid-message' });
+        return;
+      }
+      // The 160-character plaintext limit is enforced by the client, which is
+      // the only side that can read the message. The server caps the envelope
+      // instead, so it cannot be used to push oversized blobs through.
+      if (msg.ciphertext.length > MAX_CIPHERTEXT_B64) {
         send(ws, { type: 'error', error: 'message-too-long' });
         return;
       }
@@ -182,7 +234,8 @@ wss.on('connection', (ws) => {
       sendTo(peerId, {
         type: 'message',
         messageId: crypto.randomUUID(),
-        text,
+        iv: msg.iv,
+        ciphertext: msg.ciphertext,
         timestamp: new Date().toISOString(),
       });
       return;

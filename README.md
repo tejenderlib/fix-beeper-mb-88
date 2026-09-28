@@ -14,7 +14,7 @@ Two devices pair through a private invite code, then talk directly through a Web
 - **Directional message cards** — your slips print right, received slips print left
 - **Connection status and peer lifecycle handling** — offline / waiting / incoming / connected / denied / peer-lost
 - **Automated protocol and regression tests** — 65 tests over the wire protocol and server-authority boundaries
-- **End-to-end encryption** — *in development*
+- **End-to-end encryption** — ephemeral P-256 ECDH per session, HKDF-SHA256 → AES-256-GCM, Web Crypto API, no dependencies. The server relays ciphertext it cannot read.
 
 ## How it works
 
@@ -32,16 +32,18 @@ client/style.css ──┘  ▲                │     static file server
 
 **1. Pair.** Device A sends `create-invite` and gets back a code. Device B sends `join-invite`; A receives a `connection-request` and either accepts or rejects. Accepting establishes a pair and tells both sides their `peerId`, `expiresAt`, and duration. The server computes the peer id from its own bookkeeping — a client can never declare who its peer is.
 
-**2. Talk.** A sends `{type:'message', text}`. The server validates the payload (string, non-blank after trim, ≤160 chars, sender has a live pair) and relays it to the peer only. The sender's own `transmit()` already printed its slip locally, so there is no echo.
+**2. Talk.** A sends `{type:'message', iv, ciphertext}`. The server validates the envelope, confirms A has a live pair, and relays it to the peer only — it cannot read the contents. A's local `transmit()` already printed its slip, so there is no echo. A plaintext `text` field is rejected outright rather than quietly relayed.
 
-**3. Expire.** A 1-second sweep closes the pair at `expiresAt` and notifies both sides. Either side can `extend-connection` first, which adds time to what remains. The relay re-checks liveness per message, so a dead peer can never be written to.
+### 3. Encrypt.** On `connection-established` each device generates an ephemeral P-256 key pair and publishes only the public key, which the server relays to that one peer. Both sides derive the same AES-256-GCM session key locally via HKDF-SHA256. Messages are encrypted before they hit the socket, so the wire carries `{iv, ciphertext}` and the server never sees plaintext. The session key is destroyed on peer disconnect, on expiry, and on socket close.
+
+### 4. Expire.** A 1-second sweep closes the pair at `expiresAt` and notifies both sides. Either side can `extend-connection` first, which adds time to what remains. The relay re-checks liveness per message, so a dead peer can never be written to.
 
 ### Protocol sketch
 
 | Direction | Message |
 | --- | --- |
-| S → C | `welcome`, `invite-created`, `connection-request`, `connection-established`, `connection-extended`, `connection-expired`, `peer-disconnected`, `message`, `error` |
-| C → S | `hello`, `ping`, `create-invite`, `join-invite`, `accept-connection`, `reject-connection`, `extend-connection`, `message` |
+| S → C | `welcome`, `invite-created`, `connection-request`, `connection-established`, `connection-extended`, `connection-expired`, `peer-disconnected`, `key-exchange`, `message`, `error` |
+| C → S | `hello`, `ping`, `create-invite`, `join-invite`, `accept-connection`, `reject-connection`, `extend-connection`, `key-exchange`, `message` |
 | HTTP | `GET /health` → `{"ok":true}` |
 
 ## Tech stack
@@ -94,7 +96,15 @@ Not yet built: delivery receipts, message history, persistence, and auth.
 
 ## Future work
 
-**End-to-end encryption is the next major piece.** Today the server relays plaintext and holds the pairing state, so it is a trusted party in the path. The plan is for each device to generate a keypair during pairing and derive a shared secret, so the server routes ciphertext it cannot read. The design goal is that the current server-authority boundaries — which peer is who, and when a pair dies — survive intact once the payload is opaque to the server; the regression tests that guard those boundaries are written to keep passing.
+**Authenticated key exchange.** ECDH gives confidentiality against a passive server, but unauthenticated ECDH does not stop an *active* one: a man-in-the-middle can substitute its own public key during the exchange and read everything. Closing that means signing the key exchange — each device publishing a long-term identity key, and the ephemeral keys being signed with it, so a substituted key is detected rather than trusted.
+
+Other open items:
+
+- **Peer re-keying.** Today the session key is fixed for the life of a pairing. A peer that sends a second `key-exchange` re-keys the session; the last key wins. Rotating on a schedule, and rejecting out-of-band re-keys, are both open.
+- **No forward secrecy.** A device that leaks its private key retroactively exposes that session's traffic, since the private key is held for the session's duration. Ephemeral per-message keys would fix it.
+- **Transport security.** The app is served over plain HTTP/WS. E2EE protects message content, but invite codes and session metadata still travel in the clear. Serve it over TLS/WSS.
+- **Server-visible metadata.** Message count, size, timing, and pairing events are all visible to the relay. Padding and batching would reduce that.
+- Not yet built: delivery receipts, message history, persistence, and auth.
 
 ## Screenshots
 
