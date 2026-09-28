@@ -1,7 +1,7 @@
 # FIX BEEPER MB-88
 
 **A retro two-person real-time messaging terminal inspired by classic pagers, beepers, and message typewriters.**
-
+https://github.com/tejenderlib/fix-beeper-mb-88/blob/main/media/mb88-demo.mp4
 <p align="center">
   <video src="media/mb88-demo.mp4" controls width="880">
     Your browser does not support embedded video.
