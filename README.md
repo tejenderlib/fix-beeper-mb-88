@@ -1,4 +1,5 @@
 # FIX BEEPER MB-88
+## v1.0.0
 
 **A retro two-person real-time messaging terminal inspired by classic pagers, beepers, and message typewriters.**
 
